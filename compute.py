@@ -2,6 +2,8 @@ import sys
 import operator
 import formula
 
+class NotImplementedException(Exception):
+  pass
 
 operations = {
     formula.TokenType.T_PLUS: operator.add,
@@ -10,12 +12,16 @@ operations = {
     formula.TokenType.T_DIV: operator.truediv
 }
 
-
 def compute(node):
     if node.token_type == formula.TokenType.T_NUM:
-        return node.value
+        return node.asInteger()
+    elif not node.token_type in operations:
+        raise NotImplementedException(f"token not implemented for computing")
+
     left_result = compute(node.children[0])
     right_result = compute(node.children[1])
+    
+
     operation = operations[node.token_type]
     return operation(left_result, right_result)
 

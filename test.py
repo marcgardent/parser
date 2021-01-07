@@ -1,34 +1,83 @@
+import unittest
 import compute
-import parser
+
+from formula import lexical_analysis, TokenType, cleanup, parse, UnexpectedTokenException,InvalidTokenException
 
 
-def test_computation(inputstring, expected_output):
-    ast = parser.parse(inputstring)
-    actual_result = compute.compute(ast)
-    print('{} should evaluate to {}, actual result is {}'.format(inputstring, expected_output, actual_result))
-    assert actual_result == expected_output
+class TestStringMethods(unittest.TestCase):
 
+    def test_cleanup(self):
+        for string in ["A+A", "A + A", " A+A", "A+A "]:
+            with self.subTest("Checking if string is cleaned", string=string):
+                r = cleanup(string)
+                self.assertEqual("A+A", r)
 
-test_computation('1+1', 2)
-test_computation('1-1', 0)
-test_computation('3-2+1', 2)
-test_computation('8/4/2', 1)
-test_computation('1*2', 2)
-test_computation('(1+7)*(9+2)', 88)
-test_computation('(2+7)/4', 2.25)
-test_computation('7/4', 1.75)
-test_computation('2*3+4', 10)
-test_computation('2*(3+4)', 14)
-test_computation('2+3*4', 14)
-test_computation('2+(3*4)', 14)
-test_computation('2-(3*4+1)', -11)
-test_computation('2*(3*4+1)', 26)
-test_computation('8/((1+3)*2)', 1)
+    def test_scalar(self):
+        for (number, tokenType) in [("0.0", TokenType.T_FLOAT), (".1", TokenType.T_FLOAT), ("1", TokenType.T_NUM)]:
+            with self.subTest("Checking if number is tokenized", number=number, tokenType=tokenType):
+                result = lexical_analysis(number)
+                self.assertListEqual([t.token_type for t in result], [
+                                     tokenType, TokenType.T_END])
+                self.assertListEqual([t.value for t in result], [number, None])
 
-try:
-    test_computation('1+1)', 1)
-    raised = False
-except Exception:
-    raised = True
-assert raised
+    def test_symbol(self):
+        for number in ["a", "A", "aaa", "a.a", "a_ass", "a1", "a1_z.x"]:
+            with self.subTest("Checking if number is tokenized", number=number):
+                result = lexical_analysis(number)
+                self.assertListEqual([t.token_type for t in result], [
+                                     TokenType.T_SYMBOL, TokenType.T_END])
+                self.assertListEqual([t.value for t in result], [number, None])
 
+    def test_simple_tokens(self):
+        for (exp, tokenType) in [("+", TokenType.T_PLUS), ("*", TokenType.T_MULT), ("/", TokenType.T_DIV), ("-", TokenType.T_MINUS), (",", TokenType.T_SEPARATOR)]:
+            with self.subTest("Checking if exp is tokenType", exp=exp, tokenType=tokenType):
+                result = lexical_analysis("1"+exp+"1")
+                self.assertListEqual([t.token_type for t in result], [
+                                     TokenType.T_NUM, tokenType, TokenType.T_NUM, TokenType.T_END])
+                self.assertListEqual([t.value for t in result], [
+                                     '1', exp, '1', None])
+
+    def test_parenthesis(self):
+        result = lexical_analysis("(1)")
+        self.assertListEqual([t.token_type for t in result], [
+                             TokenType.T_LPAR, TokenType.T_NUM, TokenType.T_RPAR, TokenType.T_END])
+        self.assertListEqual([t.value for t in result], ['(', '1', ')', None])
+
+    def test_function(self):
+        result = lexical_analysis("fn(1)")
+        self.assertListEqual([t.token_type for t in result], [
+                             TokenType.T_SYMBOL, TokenType.T_LPAR, TokenType.T_NUM, TokenType.T_RPAR, TokenType.T_END])
+        self.assertListEqual([t.value for t in result], [
+                             'fn', '(', '1', ')', None])
+
+    def test_computation(self):
+        cases = [('1+1', 2), ('1-1', 0), ('3-2+1', 2), ('8/4/2', 1),
+                ('1*2', 2), ('(1+7)*(9+2)', 88), ('(2+7)/4', 2.25),
+                ('7/4', 1.75), ('2*3+4', 10), ('2*(3+4)', 14),
+                ('2+3*4', 14), ('2+(3*4)', 14), ('2-(3*4+1)', -11),
+                ('2*(3*4+1)', 26), ('8/((1+3)*2)', 1), ('101', 101)]
+        for (exp, value) in cases:
+                with self.subTest("Checking if exp is computed", exp=exp, value=value):
+                    actual_result = compute.compute(parse(exp))
+                    self.assertEqual(value, actual_result)
+
+    def test_parsing_failed(self):
+        for exp in ["1+1)", "fun(1", '((1)']:
+                with self.subTest("Checking if the parse() raise UnexpectedTokenException", exp=exp):
+                    x = lambda : parse(exp)
+                    self.assertRaises(UnexpectedTokenException, x)
+
+    def test_tokenizing_failed(self):
+        for exp in ["1+1$", "fun 1", ' 0+.aa']:
+                with self.subTest("Checking if the lexical_analysis() raise InvalidTokenException", exp=exp):
+                    x = lambda : lexical_analysis(exp)
+                    self.assertRaises(InvalidTokenException, x)
+                    
+    def test_computing_failed(self):
+        for exp in ["fn(1)", "1+a", '1^2', '1+1.2']:
+                with self.subTest("Checking if the compute() raise NotImplementedException", exp=exp):
+                    x = lambda : compute.compute(parse(exp))
+                    self.assertRaises(compute.NotImplementedException, x)
+        
+if __name__ == '__main__':
+    unittest.main()

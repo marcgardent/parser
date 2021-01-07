@@ -1,4 +1,4 @@
-import formula
+import formula as parser
 import sys
 
 node_counter = 1
@@ -32,6 +32,6 @@ def _to_graphviz(node):
 
 if __name__ == '__main__':
     inputstring = sys.argv[1]
-    ast = formula.parse(inputstring)
+    ast = parser.parse(inputstring)
     label(ast)
     to_graphviz(ast)
