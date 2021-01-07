@@ -5,6 +5,8 @@ import enum
 import re
 import io
 import logging
+
+
 class TokenType(enum.Enum):
     T_NUM = 0
     T_FLOAT = 1
@@ -15,10 +17,16 @@ class TokenType(enum.Enum):
     T_LPAR = 6
     T_RPAR = 7
     T_SYMBOL = 8
-    T_SEPARATOR = 9
-    T_EXP = 10
-    T_END = 11
+    G_FUNCTION = 9
+    T_SEPARATOR = 10
+    T_POW = 11
+    T_END = 12
+    G_PARENTHESIS = 13
+    U_SIGN = 14
+    B_SUM = 15
+    B_PRODUCT = 16
 
+###################################################################################
 def tokenize_constant(tokenType, match):
     length = len(match)    
     def t(ctx):
@@ -34,6 +42,7 @@ def tokenize_regex(tokenType, regex, buffer_size=16):
         return (success, tokenType, r.group(1) if success else None, len(buffer))
     return t
 
+
 ###################################################################################
 # Modeling
 ###################################################################################
@@ -41,23 +50,27 @@ CLEANUP_REGEX = r'\s+'
 
 TOKENIZERS = [
     tokenize_constant(TokenType.T_PLUS, '+'),
-    tokenize_constant(TokenType.T_EXP, '^'),
+    tokenize_constant(TokenType.T_POW, '^'),
     tokenize_constant(TokenType.T_MINUS, '-'),
     tokenize_constant(TokenType.T_MULT, '*'),
     tokenize_constant(TokenType.T_DIV, '/'),
     tokenize_constant(TokenType.T_LPAR, '('),
     tokenize_constant(TokenType.T_RPAR, ')'),
     tokenize_constant(TokenType.T_SEPARATOR, ','),
-    tokenize_regex(TokenType.T_FLOAT, r'(\d*\.\d+)'),
-    tokenize_regex(TokenType.T_NUM, r'(\d+)'),
+    tokenize_regex(TokenType.T_FLOAT, r'((\+|-)?\d*\.\d+)'),
+    tokenize_regex(TokenType.T_NUM, r'((\+|-)?\d+)'),
     tokenize_regex(TokenType.T_SYMBOL, r'([a-zA-Z][a-zA-Z0-9_\.]*)'),
     ]
 
 LEAF_BEHAVIOR = (TokenType.T_NUM, TokenType.T_FLOAT, TokenType.T_SYMBOL)
-PRIORITY_BEHAVIOR = (TokenType.T_MULT, TokenType.T_DIV, TokenType.T_EXP)
+PRIORITY_BEHAVIOR = (TokenType.T_MULT, TokenType.T_DIV, TokenType.T_POW)
 DEFAULT_BEHAVIOR = (TokenType.T_PLUS, TokenType.T_MINUS,TokenType.T_SEPARATOR)
 FLOAT_CAST_BEHAVIOR = (TokenType.T_NUM,  TokenType.T_FLOAT)
+SIGN_BEHAVIOR = (TokenType.T_PLUS,  TokenType.T_MINUS)
+EXPRESSION_BEHAVIOR= (TokenType.T_NUM, TokenType.T_FLOAT, TokenType.T_SYMBOL, TokenType.T_LPAR, TokenType.G_FUNCTION, TokenType.G_PARENTHESIS)
+
 ###################################################################################
+
 class InvalidCastOperationException(Exception):
   pass
 class InvalidTokenException(Exception):
@@ -66,12 +79,24 @@ class UnexpectedTokenException(Exception):
   pass
 
 
-class Node:
+class Node:    
     def __init__(self, token_type, value=None):
         self.token_type = token_type
         self.value = value
+        self.parent = None
         self.children = []
 
+    def is_root(self): return self.parent ==None
+
+    def append(self, *children):
+        for child in children:
+            self.children.append(child)
+            child.parent = self 
+    def detach(self):
+        if self.parent:
+            self.parent.children.remove(self)
+        
+        else: raise Exception()
     def print(self, padding=''):
         print(f"{padding}{self.token_type.name}={self.value}")
 
@@ -87,8 +112,15 @@ class Node:
     def asFloat(self):
         if not self.token_type in (FLOAT_CAST_BEHAVIOR): raise InvalidCastOperationException(f"can't cast the node {self.token_type} into int()")
         return float(self.value)
+    
+    def left(self): assert len(self.children)==2; return self.children[0]
+    def right(self): assert len(self.children)==2; return self.children[1]
+    def unique(self): assert len(self.children)==1; return self.children[0]
+    def remove_all(self):
+        for c in self.children:
+            c.parent = None
+        self.children.clear()
         
-
 def lexical_analysis(s):
 
     tokens = []
@@ -129,8 +161,7 @@ def parse_e(tokens):
 
     while tokens[0].token_type in DEFAULT_BEHAVIOR:
         node = tokens.pop(0)
-        node.children.append(left_node)
-        node.children.append(parse_e2(tokens))
+        node.append(left_node, parse_e2(tokens))
         left_node = node
 
     return left_node
@@ -140,16 +171,21 @@ def parse_e2(tokens):
 
     while tokens[0].token_type in PRIORITY_BEHAVIOR:
         node = tokens.pop(0)
-        node.children.append(left_node)
-        node.children.append(parse_e3(tokens))
+        node.append(left_node, parse_e3(tokens))
         left_node = node
     return left_node
 
 def parse_e3(tokens):
+    if tokens[0].token_type in (SIGN_BEHAVIOR) and tokens[1].token_type in (EXPRESSION_BEHAVIOR):
+        node = tokens.pop(0)
+        node.token_type = TokenType.U_SIGN
+        node.append(parse_e(tokens))
+        return node
     if tokens[0].token_type == TokenType.T_SYMBOL and tokens[1].token_type == TokenType.T_LPAR:
         node = tokens.pop(0)
+        node.token_type = TokenType.G_FUNCTION
         match(tokens, TokenType.T_LPAR)
-        node.children.append(parse_e(tokens))
+        node.append(parse_e(tokens))
         match(tokens, TokenType.T_RPAR, TokenType.T_SEPARATOR)
         return node
 
@@ -157,9 +193,9 @@ def parse_e3(tokens):
         return tokens.pop(0)
 
     match(tokens, TokenType.T_LPAR)
-    expression = parse_e(tokens)
+    expression=Node(TokenType.G_PARENTHESIS)
+    expression.append(parse_e(tokens))
     match(tokens, TokenType.T_RPAR)
-
     return expression
 
 def cleanup(inputstring):

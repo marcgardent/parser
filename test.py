@@ -1,8 +1,8 @@
 import unittest
 import compute
-
+from  compress import compress
 from formula import lexical_analysis, TokenType, cleanup, parse, UnexpectedTokenException,InvalidTokenException
-
+import serialize
 
 class TestStringMethods(unittest.TestCase):
 
@@ -13,7 +13,13 @@ class TestStringMethods(unittest.TestCase):
                 self.assertEqual("A+A", r)
 
     def test_scalar(self):
-        for (number, tokenType) in [("0.0", TokenType.T_FLOAT), (".1", TokenType.T_FLOAT), ("1", TokenType.T_NUM)]:
+        cases= [
+            ("0.0", TokenType.T_FLOAT),
+            (".1", TokenType.T_FLOAT),
+            ("1", TokenType.T_NUM)
+        ]
+        
+        for (number, tokenType) in cases:
             with self.subTest("Checking if number is tokenized", number=number, tokenType=tokenType):
                 result = lexical_analysis(number)
                 self.assertListEqual([t.token_type for t in result], [
@@ -55,7 +61,7 @@ class TestStringMethods(unittest.TestCase):
                 ('1*2', 2), ('(1+7)*(9+2)', 88), ('(2+7)/4', 2.25),
                 ('7/4', 1.75), ('2*3+4', 10), ('2*(3+4)', 14),
                 ('2+3*4', 14), ('2+(3*4)', 14), ('2-(3*4+1)', -11),
-                ('2*(3*4+1)', 26), ('8/((1+3)*2)', 1), ('101', 101)]
+                ('2*(3*4+1)', 26), ('8/((1+3)*2)', 1), ('101', 101),  ('1+2^2+1',6)]
         for (exp, value) in cases:
                 with self.subTest("Checking if exp is computed", exp=exp, value=value):
                     actual_result = compute.compute(parse(exp))
@@ -69,15 +75,42 @@ class TestStringMethods(unittest.TestCase):
 
     def test_tokenizing_failed(self):
         for exp in ["1+1$", "fun 1", ' 0+.aa']:
-                with self.subTest("Checking if the lexical_analysis() raise InvalidTokenException", exp=exp):
-                    x = lambda : lexical_analysis(exp)
-                    self.assertRaises(InvalidTokenException, x)
+            with self.subTest("Checking if the lexical_analysis() raise InvalidTokenException", exp=exp):
+                x = lambda : lexical_analysis(exp)
+                self.assertRaises(InvalidTokenException, x)
                     
     def test_computing_failed(self):
-        for exp in ["fn(1)", "1+a", '1^2', '1+1.2']:
-                with self.subTest("Checking if the compute() raise NotImplementedException", exp=exp):
-                    x = lambda : compute.compute(parse(exp))
-                    self.assertRaises(compute.NotImplementedException, x)
-        
+        for exp in ["fn(1)", "1+a", '1+1.2']:
+            with self.subTest("Checking if the compute() raise NotImplementedException", exp=exp):
+                x = lambda : compute.compute(parse(exp))
+                self.assertRaises(compute.NotImplementedException, x)
+    
+    def test_serialize(self):
+        cases = [
+            '1',
+            'a',
+            '1-1', 
+            '1+(1-1)-1',
+            '(1+1)/2'
+        ]
+        for exp in cases:
+            with self.subTest("Checking if exp is computed", exp=exp):
+                actual_result = serialize.serialize(parse(exp))
+                self.assertEqual(exp, actual_result)
+
+    def test_compression(self):
+        cases = [
+            ('1', 'f()->{1}'), # constant
+            ('a', 'f(a)->{a}'), # identity
+            ('a*a', 'f(a)->{a*a}'), # identity
+            ('-1+2*(1/2)^2-func(x)', 'f(x)->{-1+2*(1/2)^2-func(x)}'), # sample with all operators
+            ('(a+a)*(a+a)', 'f(a)->{v0=(a+a);v0*v0}'), # factorization
+            ('(a+b)*(a+b)-a+b', 'f(a)->{v0=(a+b);v0*v0-a+b}'), # factorization
+        ]
+        for (exp, compressed) in cases:
+            with self.subTest("Checking if exp is computed", exp=exp, compressed=compressed):
+                actual_result = compress(exp)
+                self.assertEqual(compressed, actual_result)
+
 if __name__ == '__main__':
     unittest.main()
