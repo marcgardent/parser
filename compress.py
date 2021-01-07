@@ -1,13 +1,15 @@
 import formula
 from formula import TokenType
-from serialize import serialize
+from serialize import serialize, render_registry, render_left_right_as_func
+import itertools
 
+render_registry[TokenType.T_POW] = render_left_right_as_func('Math.Pow')
 
 class Javascript:
-    DECLARE_FUNCTION = 'function %s(%s){\n%s%s}\n'
+    DECLARE_FUNCTION = 'function %s(%s): number {\n%s%s}\n'
     DECLARE_ARG = '%s:number'
     ARG_SEPARATOR = ', '
-    DECLARE_VAR = '  const %s=%s;\n'
+    DECLARE_VAR = '  const %s = %s;\n'
     DECLARE_RESULT = '  return %s;\n'
     EMPTY_RESULT = 'null'
 
@@ -72,31 +74,62 @@ def iflat(node, ignore=lambda n: False):
 # def validate(flatten, criteria):
 #     return None == find_first(flatten, criteria)
 
-def sequences(iter, window):
-    for i in range(len(iter)-window+1):
-            yield iter[i:(i+window)]
+def sequences(iter):
+    length=len(iter)
+    for window in range(2, length):
+        c = list(itertools.combinations(iter, window))
+        if window*2==length: c = c[:int(len(c)/2)] #remove symmetric case
+        for seq in c:
+                yield (seq,tuple(n for n in iter if n not in seq ))
+
+def indexable(node):
+    
+    if node.token_type in (TokenType.B_PRODUCT, TokenType.B_SUM):
+        ret=dict()
+        for (sequence,others) in sequences(node.children):
+            n1 =formula.Node(node.token_type)
+            n1.value = node.value
+            n1.append(*sequence)
+            n2 = None 
+            if len(others)==1:
+                n2=others[0]
+            elif len(others)>1:
+                n2 =formula.Node(node.token_type)
+                n2.value = node.value
+                n2.append(*others)
+            ret[serialize(n1)]=n2 # remove repeat of 1+1+1+1
+        for item in ret.items(): yield item
+    else:
+        s = serialize(node)
+        yield (s, None)
 
 def compress_from_ast(ast, vars=list()):
     index = dict()
     compressed = True
     for n in flat(ast):
         if len(n.children) > 1:
-            s = serialize(n)
-            if s in index:
-                index[s].append(n)
-            else:
-                print("new index:", s)
-                index[s] = [n]
+            for (s,other) in indexable(n):
+                n.print()
+                if s in index:
+                    index[s].append((n,other))
 
+                else:
+                    index[s] = [(n,other)]
     for (k, v) in index.items():
         if len(v) > 1:
             var_label = f"v{len(vars)}"
-            print("compress", var_label, k)
             vars.append((var_label, k))
-            for n in v:
-                n.token_type = TokenType.T_SYMBOL
-                n.remove_all()
-                n.value = var_label
+            for (n,other) in v:
+                if other:
+                    n.remove_all()
+                    symbol = formula.Node(TokenType.T_SYMBOL)
+                    symbol.value = var_label
+                    n.append(symbol, other)
+
+                else:
+                    n.token_type = TokenType.T_SYMBOL
+                    n.remove_all()
+                    n.value = var_label
             compressed = False
             break
     return (compressed, ast, vars)
@@ -132,6 +165,7 @@ def compress(string, language=Speudocode):
     b = ExpresionBuilder(language)
     ast = formula.parse(string)
     collapse_all(ast)
+    sort_all(ast)
     print("------- TREE -----------")
     print()
     ast.print()
@@ -148,11 +182,14 @@ def compress(string, language=Speudocode):
     for (k,v) in vars:
         b.var(k,v)
 
+    ast.print()
+    print()
+
     b.result(serialize(ast))
     return b.to_string("f")
 
 if __name__ == '__main__':
     import sys
     string = sys.argv[1]
-    result = compress(string)
+    result = compress(string, language=Javascript)
     print(result)

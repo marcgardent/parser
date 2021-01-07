@@ -1,6 +1,6 @@
 import unittest
 import compute
-from  compress import compress
+from  compress import compress, sequences
 from formula import lexical_analysis, TokenType, cleanup, parse, UnexpectedTokenException,InvalidTokenException
 import serialize
 
@@ -103,14 +103,40 @@ class TestStringMethods(unittest.TestCase):
             ('1', 'f()->{1}'), # constant
             ('a', 'f(a)->{a}'), # identity
             ('a*a', 'f(a)->{a*a}'), # identity
-            ('-1+2*(1/2)^2-func(x)', 'f(x)->{-1+2*(1/2)^2-func(x)}'), # sample with all operators
-            ('(a+a)*(a+a)', 'f(a)->{v0=(a+a);v0*v0}'), # factorization
-            ('(a+b)*(a+b)-a+b', 'f(a)->{v0=(a+b);v0*v0-a+b}'), # factorization
+            ('-1+2*(1/2)^2-func(x)', 'f(x)->{-1+(1/2)*2^2-func(x)}'), # sample with all operators
+            # ('(a+a)*(a+a)', 'f(a)->{v0=(a+a);v0*v0}'), # factorization
+            # ('(a+b)*(a+b)-a+b', 'f(a)->{v0=(a+b);v0*v0-a+b}'), # factorization
         ]
         for (exp, compressed) in cases:
             with self.subTest("Checking if exp is computed", exp=exp, compressed=compressed):
                 actual_result = compress(exp)
                 self.assertEqual(compressed, actual_result)
+
+    def test_sequences_limit(self):
+        actual=list(sequences(['A','B','C']))
+        self.assertEqual(3,len(actual))
+        self.assertTupleEqual(actual[0], (('A','B'),('C',)))
+        self.assertTupleEqual(actual[1],(('A','C'),('B',)))
+        self.assertTupleEqual(actual[2],(('B','C'),('A',)))
+
+    def test_sequences(self):
+        actual=list(sequences(['A','B','C','D']))
+        self.assertEqual(7,len(actual))
+
+        self.assertTupleEqual(actual[0], (('A','B'),('C','D',)),"at 0")
+        self.assertTupleEqual(actual[1],(('A','C',),('B','D',)),"at 1")
+        self.assertTupleEqual(actual[2],(('A','D',),('B','C')),"at 2")
+
+        self.assertTupleEqual(actual[3],(('A', 'B', 'C'), ('D',)), "at 3")
+        self.assertTupleEqual(actual[4],(('A', 'B', 'D'), ('C',)), "at 4")
+        self.assertTupleEqual(actual[5],(('A', 'C', 'D'), ('B',)), "at 5")
+        self.assertTupleEqual(actual[6], (('B', 'C', 'D'), ('A',)), "at 6")
+        
+
+
+        
+
+
 
 if __name__ == '__main__':
     unittest.main()

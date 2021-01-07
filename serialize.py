@@ -13,7 +13,7 @@ def render_function(node): return f"{node.value}({serialize(node.unique())})"
 def render_parenthesis(node): return f"({serialize(node.unique())})"
 def render_unaire(node): return f"{node.value}{serialize(node.unique())}"
 
-def render_left_right_as_func(node,func_name,arg_begin='(',arg_end=')',arg_separator=','):
+def render_left_right_as_func(func_name,arg_begin='(',arg_end=')',arg_separator=','):
     return lambda node: f"{func_name}{arg_begin}{serialize(node.left())}{arg_separator}{serialize(node.right())}{arg_end}"
 
 def render_bag(node): return node.value.join([serialize(c) for c in node.children])
