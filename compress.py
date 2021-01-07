@@ -48,23 +48,33 @@ class ExpresionBuilder:
         return self.__lang.DECLARE_FUNCTION % (name, args, vars, res)
 
 
-def flat(node, ignore=lambda n: False):
-    if not ignore(node):
-        yield node
-        for child in node.children:
-            for flatten in flat(child, ignore):
-                yield flatten
+def flat(node):
+    yield node
+    for child in node.children:
+        for flatten in flat(child):
+            yield flatten
+            
+def iflat(node, ignore=lambda n: False):
+    for child in node.children:
+        for flatten in iflat(child):
+            yield flatten
+    yield node
 
 
-def find_first(flatten, criteria):
-    for child in flatten:
-        if criteria(child):
-            return child
-    return None
+
+# def find_first(flatten, criteria):
+#     for child in flatten:
+#         if criteria(child):
+#             return child
+#     return None
 
 
-def validate(flatten, criteria):
-    return None == find_first(flatten, criteria)
+# def validate(flatten, criteria):
+#     return None == find_first(flatten, criteria)
+
+def sequences(iter, window):
+    for i in range(len(iter)-window+1):
+            yield iter[i:(i+window)]
 
 def compress_from_ast(ast, vars=list()):
     index = dict()
@@ -112,6 +122,11 @@ def collapse_all(node):
         if node.left().token_type== TokenType.T_PLUS: collapse(node.left(), TokenType.B_PRODUCT)
     for child in node.children:
         collapse_all(child)
+
+def sort_all(node):
+    for n in iflat(node):
+        if n.token_type in (TokenType.B_SUM,  TokenType.B_PRODUCT,  TokenType.T_MULT, TokenType.T_PLUS):
+            n.children = sorted(n.children, key=lambda n: serialize(n))
 
 def compress(string, language=Speudocode):
     b = ExpresionBuilder(language)
