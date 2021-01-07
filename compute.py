@@ -1,18 +1,18 @@
 import sys
 import operator
-import parser
+import formula
 
 
 operations = {
-    parser.TokenType.T_PLUS: operator.add,
-    parser.TokenType.T_MINUS: operator.sub,
-    parser.TokenType.T_MULT: operator.mul,
-    parser.TokenType.T_DIV: operator.truediv
+    formula.TokenType.T_PLUS: operator.add,
+    formula.TokenType.T_MINUS: operator.sub,
+    formula.TokenType.T_MULT: operator.mul,
+    formula.TokenType.T_DIV: operator.truediv
 }
 
 
 def compute(node):
-    if node.token_type == parser.TokenType.T_NUM:
+    if node.token_type == formula.TokenType.T_NUM:
         return node.value
     left_result = compute(node.children[0])
     right_result = compute(node.children[1])
@@ -21,6 +21,6 @@ def compute(node):
 
 
 if __name__ == '__main__':
-    ast = parser.parse(sys.argv[1])
+    ast = formula.parse(sys.argv[1])
     result = compute(ast)
     print(result)
