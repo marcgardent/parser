@@ -387,45 +387,28 @@ Add compress the mathematic formula:
 py ./compress.py "-(sqrt((-xn^2-2*xm*xn-xm^2)*yp^2+((2*xn+2*xm)*xp*yn+(2*xn+2*xm)*xp*ym)*yp+(R^2-xp^2)*yn^2+(2*R^2-2*xp^2)*ym*yn+(R^2-xp^2)*ym^2+R^2*xn^2+2*R^2*xm*xn+R^2*xm^2)+(yn+ym)*yp+(xn+xm)*xp)/(yn^2+2*ym*yn+ym^2+xn^2+2*xm*xn+xm^2)"
 ```
 
-becomes:
+translate the formula to code and remove redundant operations:
 
-```javascript
+```python
 
-function f(ym:number, xm:number, xp:number, R:number, yn:number, xn:number, yp:number): number {
-  const v0 = (2*xm+2*xn)*xp;
-  const v1 = Math.Pow(xn,2);
-  const v2 = 2*xm*xn;
-  const v3 = Math.Pow(xm,2);
-  const v4 = Math.Pow(2*R,2);
-  const v5 = Math.Pow(R,2)-Math.Pow(xp,2);
-  const v6 = Math.Pow(R,2);
-  return -((xm+xn)*xp+(ym+yn)*yp+sqrt((v0*ym+v0*yn)*yp+Math.Pow((-v1-v2-v3)*yp,2)+(v4-Math.Pow(2*xp,2))*ym*yn+Math.Pow((v5)*yn,2)+Math.Pow((v5)*ym,2)+Math.Pow(v6*xn,2)+v4*xm*xn+Math.Pow(v6*xm,2)))/(v2+2*ym*yn+Math.Pow(yn,2)+v1+Math.Pow(ym,2)+v3);
-}
+import math
 
-//Deep search tree
-function f(yn:number, ym:number, yp:number, xp:number, R:number, xn:number, xm:number): number {
-  const v0 = 2*xm;
-  const v1 = 2*xn;
-  const v2 = v0+v1;
-  const v3 = (v2)*xp;
-  const v4 = Math.Pow(xn,2);
-  const v5 = v0*xn;
-  const v6 = Math.Pow(xm,2);
-  const v7 = 2*R;
-  const v8 = Math.Pow(v7,2);
-  const v9 = Math.Pow(R,2);
-  const v10 = Math.Pow(xp,2);
-  const v11 = v9-v10;
-  return -((xm+xn)*xp+(ym+yn)*yp+sqrt((v3*ym+v3*yn)*yp+Math.Pow((-v4-v5-v6)*yp,2)+(v8-Math.Pow(2*xp,2))*ym*yn+Math.Pow((v11)*yn,2)+Math.Pow((v11)*ym,2)+Math.Pow(v9*xn,2)+v8*xm*xn+Math.Pow(v9*xm,2)))/(v5+2*ym*yn+Math.Pow(yn,2)+v4+Math.Pow(ym,2)+v6);
-}
+def vanilla(xn, xm, R, yp, yn, ym, xp):
+  return -(yp*(yn+ym)+xp*(xn+xm)+math.sqrt(yp**2*(-xn**2-xn*xm*2-xm**2)+yp*(yn*xp*(xn*2+xm*2)+ym*xp*(xn*2+xm*2))+yn**2*(R**2-xp**2)+yn*ym*(R**2*2-xp**2*2)+ym**2*(R**2-xp**2)+xn**2*R**2+xn*xm*R**2*2+xm**2*R**2))/(yn**2+yn*ym*2+ym**2+xn**2+xn*xm*2+xm**2)
 
-//
-function f(yn:number, ym:number, yp:number, xp:number, R:number, xn:number, xm:number): number {
-return -(
-  sqrt((-xn^2-2*xm*xn-xm^2)*yp^2+((2*xn+2*xm)*xp*yn+(2*xn+2*xm)*xp*ym)*yp+(R^2-xp^2)*yn^2+(2*R^2-2*xp^2)*ym*yn+(R^2-xp^2)*ym^2+R^2*xn^2+2*R^2*xm*xn+R^2*xm^2)
-+(yn+ym)*yp+(xn+xm)*xp)
-/(yn^2+2*ym*yn+ym^2+xn^2+2*xm*xn+xm^2)
-}
+def compressed(xn, xm, R, yp, yn, ym, xp):
+  v0 = xn ** 2
+  v1 = xn*xm*2
+  v2 = xm ** 2
+  v3 = xp*(xn*2+xm*2)
+  v4 = yn ** 2
+  v5 = R ** 2*2
+  v6 = xp ** 2
+  v7 = R ** 2-v6
+  v8 = ym ** 2
+  v9 = R ** 2
+  return -(yp*(yn+ym)+xp*(xn+xm)+math.sqrt(yp**2*(-v0-v1-v2)+yp*(yn*v3+ym*v3)+yn*ym*(v5-v6*2)+v4*(v7)+v9*v0+v8*(v7)+xn*xm*v5+v9*v2))/(yn*ym*2+v4+v8+v0+v2+v1)
 
 ```
 
+> TODO test func!
