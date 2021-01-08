@@ -1,6 +1,6 @@
 import unittest
 import compute
-from  compress import compress, sequences
+from  compress import compress_from_string, sequences, sort_all
 from formula import lexical_analysis, TokenType, cleanup, parse, UnexpectedTokenException,InvalidTokenException
 import serialize
 
@@ -67,6 +67,26 @@ class TestStringMethods(unittest.TestCase):
                     actual_result = compute.compute(parse(exp))
                     self.assertEqual(value, actual_result)
 
+    def test_sort(self):
+        cases = [
+            ('1+1', '1+1'),
+            ('a-z', 'a-z'),
+            ('a+z', 'z+a'),
+            ('a+z^2', 'z^2+a'),
+            ('a+z/2', 'z/2+a'),
+            ("a*b^2", "b^2*a"),
+            ("a+b-2", "b+a-2"),
+            ("a*f(b,2)","f(b,2)*a")
+            ]
+        for (exp, value) in cases:
+            s = serialize.serializer(serialize.default_registry())
+            with self.subTest("Checking if exp is well-formed", exp=exp, sorted=value):
+                ast =parse(exp)
+                sort_all(s,ast)
+                actual_result = s(ast)
+                self.assertEqual(value, actual_result)
+
+
     def test_parsing_failed(self):
         for exp in ["1+1)", "fun(1", '((1)']:
                 with self.subTest("Checking if the parse() raise UnexpectedTokenException", exp=exp):
@@ -95,7 +115,7 @@ class TestStringMethods(unittest.TestCase):
         ]
         for exp in cases:
             with self.subTest("Checking if exp is computed", exp=exp):
-                actual_result = serialize.serialize(parse(exp))
+                actual_result = serialize.serializer(serialize.default_registry())(parse(exp))
                 self.assertEqual(exp, actual_result)
 
     def test_compression(self):
@@ -103,13 +123,13 @@ class TestStringMethods(unittest.TestCase):
             ('1', 'f()->{1}'), # constant
             ('a', 'f(a)->{a}'), # identity
             ('a*a', 'f(a)->{a*a}'), # identity
-            ('-1+2*(1/2)^2-func(x)', 'f(x)->{-1+(1/2)*2^2-func(x)}'), # sample with all operators
+            #('-1+2*(1/2)^2-func(x)', 'f(x)->{-1+(1/2)*2^2-func(x)}'), # sample with all operators
             # ('(a+a)*(a+a)', 'f(a)->{v0=(a+a);v0*v0}'), # factorization
             # ('(a+b)*(a+b)-a+b', 'f(a)->{v0=(a+b);v0*v0-a+b}'), # factorization
         ]
         for (exp, compressed) in cases:
             with self.subTest("Checking if exp is computed", exp=exp, compressed=compressed):
-                actual_result = compress(exp)
+                (actual_result,_) = compress_from_string(exp)
                 self.assertEqual(compressed, actual_result)
 
     def test_sequences_limit(self):
@@ -131,12 +151,7 @@ class TestStringMethods(unittest.TestCase):
         self.assertTupleEqual(actual[4],(('A', 'B', 'D'), ('C',)), "at 4")
         self.assertTupleEqual(actual[5],(('A', 'C', 'D'), ('B',)), "at 5")
         self.assertTupleEqual(actual[6], (('B', 'C', 'D'), ('A',)), "at 6")
-        
-
-
-        
-
-
 
 if __name__ == '__main__':
     unittest.main()
+

@@ -25,7 +25,6 @@ def compute(node):
     left_result = compute(node.left())
     right_result = compute(node.right())
     
-
     operation = operations[node.token_type]
     return operation(left_result, right_result)
 

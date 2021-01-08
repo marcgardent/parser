@@ -1,9 +1,21 @@
 import formula
 from formula import TokenType
-from serialize import serialize, render_registry, render_left_right_as_func
+from serialize import serializer, render_custom_left_right, default_registry
 import itertools
 
-render_registry[TokenType.T_POW] = render_left_right_as_func('Math.Pow')
+class Python:
+    DECLARE_FUNCTION = 'def %s(%s):\n%s%s}\n'
+    DECLARE_ARG = '%s'
+    ARG_SEPARATOR = ', '
+    DECLARE_VAR = '  %s = %s\n'
+    DECLARE_RESULT = '  return %s\n'
+    EMPTY_RESULT = 'None'
+    
+    @staticmethod
+    def serializer():
+        render_registry= default_registry()
+        render_registry[TokenType.T_POW] = render_custom_left_right(prefix='', separator='**', suffix='')
+        return serializer(render_registry)
 
 class Javascript:
     DECLARE_FUNCTION = 'function %s(%s): number {\n%s%s}\n'
@@ -12,7 +24,12 @@ class Javascript:
     DECLARE_VAR = '  const %s = %s;\n'
     DECLARE_RESULT = '  return %s;\n'
     EMPTY_RESULT = 'null'
-
+    
+    @staticmethod
+    def serializer():
+        render_registry= default_registry()
+        render_registry[TokenType.T_POW] = render_custom_left_right(prefix='Math.pow(', separator=',', suffix=')')
+        return serializer(render_registry)
 
 class Speudocode:
     DECLARE_FUNCTION = '%s(%s)->{%s%s}'
@@ -21,7 +38,10 @@ class Speudocode:
     DECLARE_VAR = '%s=%s;'
     DECLARE_RESULT = '%s'
     EMPTY_RESULT = 'None'
-
+    @staticmethod
+    def serializer():
+        render_registry= default_registry()
+        return serializer(render_registry) 
 
 class ExpresionBuilder:
     def __init__(self, language):
@@ -62,27 +82,15 @@ def iflat(node, ignore=lambda n: False):
             yield flatten
     yield node
 
-
-
-# def find_first(flatten, criteria):
-#     for child in flatten:
-#         if criteria(child):
-#             return child
-#     return None
-
-
-# def validate(flatten, criteria):
-#     return None == find_first(flatten, criteria)
-
 def sequences(iter):
     length=len(iter)
     for window in range(2, length):
         c = list(itertools.combinations(iter, window))
-        if window*2==length: c = c[:int(len(c)/2)] #remove symmetric case
+        if window*2==length: c = c[:int(len(c)/2)] #remove unsuitable symmetric cases
         for seq in c:
                 yield (seq,tuple(n for n in iter if n not in seq ))
 
-def indexable(node):
+def indexable(serialize, node):
     
     if node.token_type in (TokenType.B_PRODUCT, TokenType.B_SUM):
         ret=dict()
@@ -103,13 +111,52 @@ def indexable(node):
         s = serialize(node)
         yield (s, None)
 
+
+
+def collapse(node, type):
+   
+    if node.parent:
+        parent = node.parent
+        parent.token_type = type 
+        left=node.left()
+        right=node.right()
+        node.detach() # --> GC  free
+        left.detach()
+        right.detach()
+        parent.append(left,right)
+
+    else: raise Exception()
+
+def collapse_all(node):
+    if node.token_type == TokenType.T_PLUS:
+        if node.left().token_type== TokenType.T_PLUS: collapse(node.left(), TokenType.B_SUM)
+    elif node.token_type == TokenType.T_MULT:
+        if node.left().token_type== TokenType.T_PLUS: collapse(node.left(), TokenType.B_PRODUCT)
+    for child in node.children:
+        collapse_all(child)
+
+def sort_all(serialize, node):
+    for n in iflat(node):
+        if n.token_type in (TokenType.B_SUM,  TokenType.B_PRODUCT,  TokenType.T_MULT, TokenType.T_PLUS):
+            n.children = sorted(n.children, key=lambda n: serialize(n), reverse=True) # Maxima accordingly
+
+def add_implicit_parenthesis(node):
+    if node.type_in(TokenType.T_DIV,TokenType.T_MINUS):
+        pass
+
+
+def preprocess(serialize,ast):
+    collapse_all(ast)
+    sort_all(serialize,ast)
+    
 def compress_from_ast(ast, vars=list()):
+    serialize = Speudocode.serializer()
+    preprocess(serialize,ast)
     index = dict()
     compressed = True
     for n in flat(ast):
         if len(n.children) > 1:
-            for (s,other) in indexable(n):
-                n.print()
+            for (s,other) in indexable(serialize, n):
                 if s in index:
                     index[s].append((n,other))
 
@@ -134,45 +181,9 @@ def compress_from_ast(ast, vars=list()):
             break
     return (compressed, ast, vars)
 
-def collapse(node, type):
-   
-    if node.parent:
-        parent = node.parent
-        parent.token_type = type 
-        left=node.left()
-        right=node.right()
-        node.detach() # --> GC  free
-        left.detach()
-        right.detach()
-        parent.append(left,right)
-
-    else: raise Exception()
-
-def collapse_all(node):
-    if node.token_type == TokenType.T_PLUS:
-        if node.left().token_type== TokenType.T_PLUS: collapse(node.left(), TokenType.B_SUM)
-    elif node.token_type == TokenType.T_MULT:
-        if node.left().token_type== TokenType.T_PLUS: collapse(node.left(), TokenType.B_PRODUCT)
-    for child in node.children:
-        collapse_all(child)
-
-def sort_all(node):
-    for n in iflat(node):
-        if n.token_type in (TokenType.B_SUM,  TokenType.B_PRODUCT,  TokenType.T_MULT, TokenType.T_PLUS):
-            n.children = sorted(n.children, key=lambda n: serialize(n))
-
-def compress(string, language=Speudocode):
+def compress_from_string(string, language=Speudocode):
     b = ExpresionBuilder(language)
     ast = formula.parse(string)
-    collapse_all(ast)
-    sort_all(ast)
-    print("------- TREE -----------")
-    print()
-    ast.print()
-    print()
-    print("----- COMPRESSED -------")
-    print()
-
     b.args(set((n.value for n in flat(ast) if n.token_type == TokenType.T_SYMBOL)))
 
     (compressed, ast, vars) = compress_from_ast(ast)
@@ -181,15 +192,34 @@ def compress(string, language=Speudocode):
     
     for (k,v) in vars:
         b.var(k,v)
-
-    ast.print()
-    print()
-
-    b.result(serialize(ast))
-    return b.to_string("f")
+    b.result(language.serializer()(ast))
+    return (b.to_string("f"), ast)
 
 if __name__ == '__main__':
     import sys
     string = sys.argv[1]
-    result = compress(string, language=Javascript)
+    serialize=Speudocode.serializer()
+
+    print("------- VANILLA -----------")
+    print()
+    ast= formula.parse(string)
+    print(serialize(ast))
+    print("...........................")
+    ast.print()
+    print()
+    print("----- PREPROCESSED -------")
+    print()
+    ast=formula.parse(string)
+    preprocess(serialize, ast)
+    print(serialize(ast))
+    print("...........................")
+    ast.print()
+    
+    print()
+    print("----- COMPRESSED ----------")
+    print()
+    (result, ast) = compress_from_string(string, language=Speudocode)
     print(result)
+    print("...........................")
+    ast.print()
+    

@@ -27,18 +27,22 @@ class TokenType(enum.Enum):
     B_PRODUCT = 16
 
 ###################################################################################
+
+
 def tokenize_constant(tokenType, match):
-    length = len(match)    
+    length = len(match)
+
     def t(ctx):
-        buffer=ctx.read(length)
+        buffer = ctx.read(length)
         return (buffer == match, tokenType, match, len(buffer))
     return t
 
+
 def tokenize_regex(tokenType, regex, buffer_size=16):
     def t(ctx):
-        buffer=ctx.read(buffer_size)
-        r = re.match(regex,buffer)
-        success =r!=None
+        buffer = ctx.read(buffer_size)
+        r = re.match(regex, buffer)
+        success = r != None
         return (success, tokenType, r.group(1) if success else None, len(buffer))
     return t
 
@@ -60,152 +64,190 @@ TOKENIZERS = [
     tokenize_regex(TokenType.T_FLOAT, r'((\+|-)?\d*\.\d+)'),
     tokenize_regex(TokenType.T_NUM, r'((\+|-)?\d+)'),
     tokenize_regex(TokenType.T_SYMBOL, r'([a-zA-Z][a-zA-Z0-9_\.]*)'),
-    ]
+]
 
 LEAF_BEHAVIOR = (TokenType.T_NUM, TokenType.T_FLOAT, TokenType.T_SYMBOL)
-PRIORITY_BEHAVIOR = (TokenType.T_MULT, TokenType.T_DIV, TokenType.T_POW)
-DEFAULT_BEHAVIOR = (TokenType.T_PLUS, TokenType.T_MINUS,TokenType.T_SEPARATOR)
+
+PRIORITIES =(
+    (TokenType.T_MULT, TokenType.T_DIV),
+    (TokenType.T_PLUS, TokenType.T_MINUS, TokenType.T_SEPARATOR),
+    (TokenType.T_POW,),
+)
+
 FLOAT_CAST_BEHAVIOR = (TokenType.T_NUM,  TokenType.T_FLOAT)
 SIGN_BEHAVIOR = (TokenType.T_PLUS,  TokenType.T_MINUS)
-EXPRESSION_BEHAVIOR= (TokenType.T_NUM, TokenType.T_FLOAT, TokenType.T_SYMBOL, TokenType.T_LPAR, TokenType.G_FUNCTION, TokenType.G_PARENTHESIS)
+EXPRESSION_BEHAVIOR = (TokenType.T_NUM, TokenType.T_FLOAT, TokenType.T_SYMBOL,
+                       TokenType.T_LPAR, TokenType.G_FUNCTION, TokenType.G_PARENTHESIS)
 
 ###################################################################################
 
+
 class InvalidCastOperationException(Exception):
-  pass
+    pass
+
+
 class InvalidTokenException(Exception):
-  pass
+    pass
+
+
 class UnexpectedTokenException(Exception):
-  pass
+    pass
 
 
-class Node:    
+class Node:
     def __init__(self, token_type, value=None):
         self.token_type = token_type
         self.value = value
         self.parent = None
         self.children = []
 
-    def is_root(self): return self.parent ==None
+    def is_root(self): return self.parent == None
 
     def append(self, *children):
         for child in children:
             self.children.append(child)
-            child.parent = self 
+            child.parent = self
+
     def detach(self):
         if self.parent:
             self.parent.children.remove(self)
-        
-        else: raise Exception()
+        else:
+            raise Exception()
+
     def print(self, padding=''):
         print(f"{padding}{self.token_type.name}={self.value}")
 
-        padding=padding.replace('├', '|').replace('└', ' ').replace('─', ' ')
+        padding = padding.replace('├', '|').replace('└', ' ').replace('─', ' ')
         for child in self.children[:-1]:
             child.print(padding+'   ├───')
-        if len(self.children)>0: self.children[-1].print(padding+'   └───')
+        if len(self.children) > 0:
+            self.children[-1].print(padding+'   └───')
 
     def asInteger(self):
-        if not self.token_type == TokenType.T_NUM: raise InvalidCastOperationException(f"can't cast the node {self.token_type} into int()")
+        if not self.token_type == TokenType.T_NUM:
+            raise InvalidCastOperationException(
+                f"can't cast the node {self.token_type} into int()")
         return int(self.value)
 
     def asFloat(self):
-        if not self.token_type in (FLOAT_CAST_BEHAVIOR): raise InvalidCastOperationException(f"can't cast the node {self.token_type} into int()")
+        if not self.token_type in (FLOAT_CAST_BEHAVIOR):
+            raise InvalidCastOperationException(
+                f"can't cast the node {self.token_type} into int()")
         return float(self.value)
-    
-    def left(self): assert len(self.children)==2; return self.children[0]
-    def right(self): assert len(self.children)==2; return self.children[1]
-    def unique(self): assert len(self.children)==1; return self.children[0]
+
+    def type_in(self, *type):
+        return self.token_type in type
+
+    def left(self): assert len(self.children) == 2; return self.children[0]
+    def right(self): assert len(self.children) == 2; return self.children[1]
+    def unique(self): assert len(self.children) == 1; return self.children[0]
+
     def remove_all(self):
         for c in self.children:
             c.parent = None
         self.children.clear()
-        
+
+
 def lexical_analysis(s):
 
     tokens = []
 
-    length=len(s)
-    
+    length = len(s)
+
     ctx = io.StringIO(s)
     while ctx.tell() < length:
         token = None
         logging.debug("tokenize at char %s", ctx.tell())
-        
+
         for tokenizer in TOKENIZERS:
-            
+
             (success, tokenType, content, buffer) = tokenizer(ctx)
-            logging.debug("tokenizer result: success=%s, tokenType=%s, content=%s, buffer=%s", success, tokenType, content, buffer)
-            if success and len(content)==0:
-                    logging.error(f"the token '{tokenType}' accepted but no char consumed: check the tokenizer() for the '{tokenType}'")
+            logging.debug("tokenizer result: success=%s, tokenType=%s, content=%s, buffer=%s",
+                          success, tokenType, content, buffer)
+            if success and len(content) == 0:
+                logging.error(
+                    f"the token '{tokenType}' accepted but no char consumed: check the tokenizer() for the '{tokenType}'")
             elif success:
-                token=Node(tokenType, value=content)
-                logging.debug(f"token '{tokenType}' accepted with the value '{content}'")
+                token = Node(tokenType, value=content)
+                logging.debug(
+                    f"token '{tokenType}' accepted with the value '{content}'")
                 ctx.seek(ctx.tell()-(buffer-len(content)))
                 break
             ctx.seek(ctx.tell()-buffer)
-        if token: tokens.append(token)
-        else: raise InvalidTokenException(f'unexpected token at char {ctx.tell()}: { ctx.read(16)}')
-    
+        if token:
+            tokens.append(token)
+        else:
+            raise InvalidTokenException(
+                f'unexpected token at char {ctx.tell()}: { ctx.read(16)}')
+
     tokens.append(Node(TokenType.T_END))
     return tokens
+
 
 def match(tokens, *accepted):
     if tokens[0].token_type in accepted:
         return tokens.pop(0)
     else:
-        raise UnexpectedTokenException('Invalid syntax on token {}: excepted ({})'.format(tokens[0].token_type, ','.join([str(t) for t in accepted])))
+        raise UnexpectedTokenException('Invalid syntax on token {}: excepted ({})'.format(
+            tokens[0].token_type, ','.join([str(t) for t in accepted])))
 
-def parse_e(tokens):
-    left_node = parse_e2(tokens)
 
-    while tokens[0].token_type in DEFAULT_BEHAVIOR:
-        node = tokens.pop(0)
-        node.append(left_node, parse_e2(tokens))
-        left_node = node
+def parse_left_right_operator(accepted, parse_next):
+    def _parse(tokens):
+        left_node = parse_next(tokens)
+        while tokens[0].token_type in accepted:
+            node = tokens.pop(0)
+            node.append(left_node, parse_next(tokens))
+            left_node = node
+        return left_node
+    return _parse
 
-    return left_node
+def parse_root(tokens):
+    return parse_chain(tokens) 
 
-def parse_e2(tokens):
-    left_node = parse_e3(tokens)
-
-    while tokens[0].token_type in PRIORITY_BEHAVIOR:
-        node = tokens.pop(0)
-        node.append(left_node, parse_e3(tokens))
-        left_node = node
-    return left_node
-
-def parse_e3(tokens):
-    if tokens[0].token_type in (SIGN_BEHAVIOR) and tokens[1].token_type in (EXPRESSION_BEHAVIOR):
+def parse_expresion(tokens):
+    if tokens[0].type_in(*SIGN_BEHAVIOR) and tokens[1].type_in(*EXPRESSION_BEHAVIOR):
         node = tokens.pop(0)
         node.token_type = TokenType.U_SIGN
-        node.append(parse_e(tokens))
+        node.append(parse_root(tokens))
         return node
-    if tokens[0].token_type == TokenType.T_SYMBOL and tokens[1].token_type == TokenType.T_LPAR:
+
+    if tokens[0].type_in(TokenType.T_SYMBOL) and tokens[1].type_in(TokenType.T_LPAR):
         node = tokens.pop(0)
         node.token_type = TokenType.G_FUNCTION
         match(tokens, TokenType.T_LPAR)
-        node.append(parse_e(tokens))
+        node.append(parse_root(tokens))
         match(tokens, TokenType.T_RPAR, TokenType.T_SEPARATOR)
         return node
-
-    elif tokens[0].token_type in LEAF_BEHAVIOR:
+    elif tokens[0].type_in(*LEAF_BEHAVIOR):
         return tokens.pop(0)
 
     match(tokens, TokenType.T_LPAR)
-    expression=Node(TokenType.G_PARENTHESIS)
-    expression.append(parse_e(tokens))
+    expression = Node(TokenType.G_PARENTHESIS)
+    expression.append(parse_root(tokens))
     match(tokens, TokenType.T_RPAR)
     return expression
+
+ 
+def parse_chain_factory():
+
+    ret =parse_left_right_operator(PRIORITIES[-1], parse_expresion)
+    for c in PRIORITIES[:-1]:
+        ret = parse_left_right_operator(c, ret)
+    return ret
+parse_chain = parse_chain_factory()
+
 
 def cleanup(inputstring):
     return re.sub(CLEANUP_REGEX, '', inputstring)
 
+
 def parse(inputstring):
     tokens = lexical_analysis(cleanup(inputstring))
-    ast = parse_e(tokens)
+    ast = parse_root(tokens)
     match(tokens, TokenType.T_END)
     return ast
+
 
 if __name__ == '__main__':
     import sys
