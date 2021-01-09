@@ -1,8 +1,8 @@
 import unittest
 import compute
-
+from  compress import compress_from_string, compress_from_ast, sequences, sort_all
 from formula import lexical_analysis, TokenType, cleanup, parse, UnexpectedTokenException,InvalidTokenException
-
+import serialize
 
 class TestStringMethods(unittest.TestCase):
 
@@ -13,7 +13,13 @@ class TestStringMethods(unittest.TestCase):
                 self.assertEqual("A+A", r)
 
     def test_scalar(self):
-        for (number, tokenType) in [("0.0", TokenType.T_FLOAT), (".1", TokenType.T_FLOAT), ("1", TokenType.T_NUM)]:
+        cases= [
+            ("0.0", TokenType.T_FLOAT),
+            (".1", TokenType.T_FLOAT),
+            ("1", TokenType.T_NUM)
+        ]
+        
+        for (number, tokenType) in cases:
             with self.subTest("Checking if number is tokenized", number=number, tokenType=tokenType):
                 result = lexical_analysis(number)
                 self.assertListEqual([t.token_type for t in result], [
@@ -55,11 +61,36 @@ class TestStringMethods(unittest.TestCase):
                 ('1*2', 2), ('(1+7)*(9+2)', 88), ('(2+7)/4', 2.25),
                 ('7/4', 1.75), ('2*3+4', 10), ('2*(3+4)', 14),
                 ('2+3*4', 14), ('2+(3*4)', 14), ('2-(3*4+1)', -11),
-                ('2*(3*4+1)', 26), ('8/((1+3)*2)', 1), ('101', 101)]
+                ('2*(3*4+1)', 26), ('8/((1+3)*2)', 1), ('101', 101), ('1+2^2+1',6),
+                ('-1', -1),
+                ('-1*-1', 1),
+                ('-1^2', -1),
+                ]
         for (exp, value) in cases:
                 with self.subTest("Checking if exp is computed", exp=exp, value=value):
                     actual_result = compute.compute(parse(exp))
                     self.assertEqual(value, actual_result)
+
+    def test_sort(self):
+        cases = [
+            ('1+1', '1+1'),
+            ('-1+2', '2+-1'),
+            ('a-z', 'a-z'),
+            ('a+z', 'z+a'),
+            ('a+z^2', 'z^2+a'),
+            ('a+z/2', 'z/2+a'),
+            ("a*b^2", "b^2*a"),
+            ("a+b-2", "b+a-2"),
+            ("a*f(b,2)","f(b,2)*a")
+            ]
+        for (exp, value) in cases:
+            s = serialize.serializer(serialize.default_registry())
+            with self.subTest("Checking if exp is well-formed", exp=exp, sorted=value):
+                ast =parse(exp)
+                sort_all(s,ast)
+                actual_result = s(ast)
+                self.assertEqual(value, actual_result)
+
 
     def test_parsing_failed(self):
         for exp in ["1+1)", "fun(1", '((1)']:
@@ -69,15 +100,67 @@ class TestStringMethods(unittest.TestCase):
 
     def test_tokenizing_failed(self):
         for exp in ["1+1$", "fun 1", ' 0+.aa']:
-                with self.subTest("Checking if the lexical_analysis() raise InvalidTokenException", exp=exp):
-                    x = lambda : lexical_analysis(exp)
-                    self.assertRaises(InvalidTokenException, x)
+            with self.subTest("Checking if the lexical_analysis() raise InvalidTokenException", exp=exp):
+                x = lambda : lexical_analysis(exp)
+                self.assertRaises(InvalidTokenException, x)
                     
     def test_computing_failed(self):
-        for exp in ["fn(1)", "1+a", '1^2', '1+1.2']:
-                with self.subTest("Checking if the compute() raise NotImplementedException", exp=exp):
-                    x = lambda : compute.compute(parse(exp))
-                    self.assertRaises(compute.NotImplementedException, x)
-        
+        for exp in ["fn(1)", "1+a", '1+1.2']:
+            with self.subTest("Checking if the compute() raise NotImplementedException", exp=exp):
+                x = lambda : compute.compute(parse(exp))
+                self.assertRaises(compute.NotImplementedException, x)
+    
+    def test_serialize(self):
+        cases = [
+            '1',
+            'a',
+            '1-1', 
+            '1+(1-1)-1',
+            '(1+1)/2'
+        ]
+        for exp in cases:
+            with self.subTest("Checking if exp is computed", exp=exp):
+                actual_result = serialize.serializer(serialize.default_registry())(parse(exp))
+                self.assertEqual(exp, actual_result)
+
+    def test_compression(self):
+        cases = [
+            ('1', 'f()->{1}'),
+            ('a', 'f(a)->{a}'), 
+            ('a*a', 'f(a)->{a*a}'), 
+            ('a*z^2', 'f(a,z)->{z*z*a}'),
+            ('a*z/2', 'f(a,z)->{z*a/2}'),
+            ('a+z/2', 'f(a,z)->{z/2+a}'),
+            ('-1+2*(1/2)^2-func(x)', 'f(x)->{2*(1/2)^2+-1-func(x)}'), # sample with all operators
+            ('(a+a)*(a+a)', 'f(a)->{v0=a+a;(v0)*(v0)}'), # factorization
+            ('(a+b)*(a+b)-a+b', 'f(a,b)->{v0=b+a;b+(v0)*(v0)-a}'), # factorization
+        ]
+        for (exp, compressed) in cases:
+            with self.subTest("Checking if exp is computed", exp=exp, compressed=compressed):
+                #parse(exp).print()
+                (actual_result,_) = compress_from_string(exp)
+                self.assertEqual(compressed, actual_result)
+
+    def test_sequences_limit(self):
+        actual=list(sequences(['A','B','C']))
+        self.assertEqual(3,len(actual))
+        self.assertTupleEqual(actual[0], (('A','B'),('C',)))
+        self.assertTupleEqual(actual[1],(('A','C'),('B',)))
+        self.assertTupleEqual(actual[2],(('B','C'),('A',)))
+
+    def test_sequences(self):
+        actual=list(sequences(['A','B','C','D']))
+        self.assertEqual(7,len(actual))
+
+        self.assertTupleEqual(actual[0], (('A','B'),('C','D',)),"at 0")
+        self.assertTupleEqual(actual[1],(('A','C',),('B','D',)),"at 1")
+        self.assertTupleEqual(actual[2],(('A','D',),('B','C')),"at 2")
+
+        self.assertTupleEqual(actual[3],(('A', 'B', 'C'), ('D',)), "at 3")
+        self.assertTupleEqual(actual[4],(('A', 'B', 'D'), ('C',)), "at 4")
+        self.assertTupleEqual(actual[5],(('A', 'C', 'D'), ('B',)), "at 5")
+        self.assertTupleEqual(actual[6], (('B', 'C', 'D'), ('A',)), "at 6")
+
 if __name__ == '__main__':
     unittest.main()
+

@@ -332,3 +332,83 @@ The same is done in `parse_e2()` for getting the associativity of multiplication
 [Wikipedia article for LL parsing](https://en.wikipedia.org/wiki/LL_parser)
 
 [Pierre Geurts' slides on compilers](https://people.montefiore.uliege.be/geurts/Cours/compil/2017/compilers-slides-2017-2018.pdf)
+
+
+## Fork
+
+### CHANGELOG
+
+Declarative tokenizing system and two types of tokenizer added:
+
+* char level tokenizer 
+* regex tokenizer
+
+new tokens added:
+
+* `float` : for instance `0.1` `.1`
+* `number`: number greater than `9` is tokenized
+* `power` : operator `^` 
+* `symbol`: for variables and functions
+* `separator`: for the functions `,`
+
+new grammar syntax added:
+
+* the sequence (`symbol`,`left-parenthesis`) create `function` node
+
+minor changes:
+
+* `parser.py` renamed due to `parser` is out-of-the-box module also
+* unittest uses the framework and new tests added
+
+Tree view mode txt added:
+
+```sh
+python d:\temp\parser\formula.py "z+1+(z+1)/2"
+expresion parsed: z+1+(z+1)/2
+T_PLUS=+
+   ├───T_PLUS=+
+   |      ├───T_SYMBOL=z
+   |      └───T_NUM=1
+   └───T_DIV=/
+          ├───G_PARENTHESIS=None
+          |      └───T_PLUS=+
+          |             ├───T_SYMBOL=z
+          |             └───T_NUM=1
+          └───T_NUM=2
+```
+
+### Goal of Fork
+
+> WIP
+
+Add compress the mathematic formula:
+
+```sh
+py ./compress.py "-(sqrt((-xn^2-2*xm*xn-xm^2)*yp^2+((2*xn+2*xm)*xp*yn+(2*xn+2*xm)*xp*ym)*yp+(R^2-xp^2)*yn^2+(2*R^2-2*xp^2)*ym*yn+(R^2-xp^2)*ym^2+R^2*xn^2+2*R^2*xm*xn+R^2*xm^2)+(yn+ym)*yp+(xn+xm)*xp)/(yn^2+2*ym*yn+ym^2+xn^2+2*xm*xn+xm^2)"
+```
+
+translate the formula to code and remove redundant operations:
+
+```python
+
+import math
+
+def vanilla(xn, xm, R, yp, yn, ym, xp):
+  return -(yp*(yn+ym)+xp*(xn+xm)+math.sqrt(yp**2*(-xn**2-xn*xm*2-xm**2)+yp*(yn*xp*(xn*2+xm*2)+ym*xp*(xn*2+xm*2))+yn**2*(R**2-xp**2)+yn*ym*(R**2*2-xp**2*2)+ym**2*(R**2-xp**2)+xn**2*R**2+xn*xm*R**2*2+xm**2*R**2))/(yn**2+yn*ym*2+ym**2+xn**2+xn*xm*2+xm**2)
+
+def compressed(xn, xm, R, yp, yn, ym, xp):
+  v0 = xn ** 2
+  v1 = xn*xm*2
+  v2 = xm ** 2
+  v3 = xp*(xn*2+xm*2)
+  v4 = yn ** 2
+  v5 = R ** 2*2
+  v6 = xp ** 2
+  v7 = R ** 2-v6
+  v8 = ym ** 2
+  v9 = R ** 2
+  return -(yp*(yn+ym)+xp*(xn+xm)+math.sqrt(yp**2*(-v0-v1-v2)+yp*(yn*v3+ym*v3)+yn*ym*(v5-v6*2)+v4*(v7)+v9*v0+v8*(v7)+xn*xm*v5+v9*v2))/(yn*ym*2+v4+v8+v0+v2+v1)
+
+```
+
+> TODO test func!
