@@ -1,6 +1,6 @@
 import unittest
 import compute
-from  compress import compress_from_string, sequences, sort_all
+from  compress import compress_from_string, compress_from_ast, sequences, sort_all
 from formula import lexical_analysis, TokenType, cleanup, parse, UnexpectedTokenException,InvalidTokenException
 import serialize
 
@@ -61,7 +61,11 @@ class TestStringMethods(unittest.TestCase):
                 ('1*2', 2), ('(1+7)*(9+2)', 88), ('(2+7)/4', 2.25),
                 ('7/4', 1.75), ('2*3+4', 10), ('2*(3+4)', 14),
                 ('2+3*4', 14), ('2+(3*4)', 14), ('2-(3*4+1)', -11),
-                ('2*(3*4+1)', 26), ('8/((1+3)*2)', 1), ('101', 101),  ('1+2^2+1',6)]
+                ('2*(3*4+1)', 26), ('8/((1+3)*2)', 1), ('101', 101), ('1+2^2+1',6),
+                ('-1', -1),
+                ('-1*-1', 1),
+                ('-1^2', -1),
+                ]
         for (exp, value) in cases:
                 with self.subTest("Checking if exp is computed", exp=exp, value=value):
                     actual_result = compute.compute(parse(exp))
@@ -70,6 +74,7 @@ class TestStringMethods(unittest.TestCase):
     def test_sort(self):
         cases = [
             ('1+1', '1+1'),
+            ('-1+2', '2+-1'),
             ('a-z', 'a-z'),
             ('a+z', 'z+a'),
             ('a+z^2', 'z^2+a'),
@@ -120,15 +125,19 @@ class TestStringMethods(unittest.TestCase):
 
     def test_compression(self):
         cases = [
-            ('1', 'f()->{1}'), # constant
-            ('a', 'f(a)->{a}'), # identity
-            ('a*a', 'f(a)->{a*a}'), # identity
-            #('-1+2*(1/2)^2-func(x)', 'f(x)->{-1+(1/2)*2^2-func(x)}'), # sample with all operators
-            # ('(a+a)*(a+a)', 'f(a)->{v0=(a+a);v0*v0}'), # factorization
-            # ('(a+b)*(a+b)-a+b', 'f(a)->{v0=(a+b);v0*v0-a+b}'), # factorization
+            ('1', 'f()->{1}'),
+            ('a', 'f(a)->{a}'), 
+            ('a*a', 'f(a)->{a*a}'), 
+            ('a*z^2', 'f(a,z)->{z*z*a}'),
+            ('a*z/2', 'f(a,z)->{z*a/2}'),
+            ('a+z/2', 'f(a,z)->{z/2+a}'),
+            ('-1+2*(1/2)^2-func(x)', 'f(x)->{2*(1/2)^2+-1-func(x)}'), # sample with all operators
+            ('(a+a)*(a+a)', 'f(a)->{v0=a+a;(v0)*(v0)}'), # factorization
+            ('(a+b)*(a+b)-a+b', 'f(a,b)->{v0=b+a;b+(v0)*(v0)-a}'), # factorization
         ]
         for (exp, compressed) in cases:
             with self.subTest("Checking if exp is computed", exp=exp, compressed=compressed):
+                #parse(exp).print()
                 (actual_result,_) = compress_from_string(exp)
                 self.assertEqual(compressed, actual_result)
 

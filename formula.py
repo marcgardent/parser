@@ -28,7 +28,6 @@ class TokenType(enum.Enum):
 
 ###################################################################################
 
-
 def tokenize_constant(tokenType, match):
     length = len(match)
 
@@ -68,11 +67,11 @@ TOKENIZERS = [
 
 LEAF_BEHAVIOR = (TokenType.T_NUM, TokenType.T_FLOAT, TokenType.T_SYMBOL)
 
-PRIORITIES =(
-    (TokenType.T_MULT, TokenType.T_DIV),
-    (TokenType.T_PLUS, TokenType.T_MINUS, TokenType.T_SEPARATOR),
-    (TokenType.T_POW,),
-)
+# PRIORITIES =(
+#     (TokenType.T_MULT, TokenType.T_DIV),
+#     (TokenType.T_PLUS, TokenType.T_MINUS, TokenType.T_SEPARATOR),
+#     (TokenType.T_POW,),
+# )
 
 FLOAT_CAST_BEHAVIOR = (TokenType.T_NUM,  TokenType.T_FLOAT)
 SIGN_BEHAVIOR = (TokenType.T_PLUS,  TokenType.T_MINUS)
@@ -111,8 +110,6 @@ class Node:
     def detach(self):
         if self.parent:
             self.parent.children.remove(self)
-        else:
-            raise Exception()
 
     def print(self, padding=''):
         print(f"{padding}{self.token_type.name}={self.value}")
@@ -192,24 +189,47 @@ def match(tokens, *accepted):
             tokens[0].token_type, ','.join([str(t) for t in accepted])))
 
 
-def parse_left_right_operator(accepted, parse_next):
+def _parse_left_right_operator(label,accepted, parse_next):
     def _parse(tokens):
+        logging.debug(f"{label}...{tokens[0].value}")
         left_node = parse_next(tokens)
         while tokens[0].token_type in accepted:
+            logging.debug(f"while {label}...{tokens[0].value}")
             node = tokens.pop(0)
             node.append(left_node, parse_next(tokens))
             left_node = node
         return left_node
     return _parse
+ 
+def _parse_sign(parse_next):
+    def _parse(tokens):
+        logging.debug(f"parse_sign... {tokens[0].value}")
+        left_node = parse_next(tokens)
+        if left_node.type_in(TokenType.U_SIGN):
+            logging.debug(f"if parse_sign...{tokens[0].value}")
+            while tokens[0].type_in(*EXPRESSION_BEHAVIOR):
+                logging.debug(f"while parse_sign...{tokens[0].value}")
+                node = tokens.pop(0)
+                node.append(left_node, parse_expression(tokens))
+                left_node = node
+            else:
+                pass
 
-def parse_root(tokens):
-    return parse_chain(tokens) 
+        return left_node
+    return _parse
+def _parse_root(parse_next):
+    def _parse(tokens):
+        logging.debug(f"parse_root... {tokens[0].value}");
+        return parse_sum(tokens)
+    return _parse
 
-def parse_expresion(tokens):
-    if tokens[0].type_in(*SIGN_BEHAVIOR) and tokens[1].type_in(*EXPRESSION_BEHAVIOR):
+def parse_expression(tokens):
+    logging.debug(f"parse_expresion... {tokens[0].value}")
+    if tokens[0].type_in(*SIGN_BEHAVIOR): 
         node = tokens.pop(0)
+        next=parse_product(tokens)
         node.token_type = TokenType.U_SIGN
-        node.append(parse_root(tokens))
+        node.append(next)
         return node
 
     if tokens[0].type_in(TokenType.T_SYMBOL) and tokens[1].type_in(TokenType.T_LPAR):
@@ -228,14 +248,15 @@ def parse_expresion(tokens):
     match(tokens, TokenType.T_RPAR)
     return expression
 
- 
-def parse_chain_factory():
+parse_power=_parse_left_right_operator("parse_power",(TokenType.T_POW,), parse_expression)
+parse_product =_parse_left_right_operator("parse_product",(TokenType.T_MULT, TokenType.T_DIV), parse_power)
+#parse_sign = _parse_sign(parse_product)
+parse_sum = _parse_left_right_operator("parse_sum",(TokenType.T_PLUS, TokenType.T_MINUS, TokenType.T_SEPARATOR), parse_product)
+parse_root = _parse_root(parse_sum)
 
-    ret =parse_left_right_operator(PRIORITIES[-1], parse_expresion)
-    for c in PRIORITIES[:-1]:
-        ret = parse_left_right_operator(c, ret)
-    return ret
-parse_chain = parse_chain_factory()
+
+
+
 
 
 def cleanup(inputstring):
@@ -252,7 +273,7 @@ def parse(inputstring):
 if __name__ == '__main__':
     import sys
     logging.basicConfig(level=logging.DEBUG)
-    inputstring = sys.argv[1]
+    inputstring =  sys.argv[1] if len(sys.argv) ==2 else "(-1^2+1)/(-1+2)"
     ast = parse(inputstring)
     print(f"expresion parsed: {cleanup(inputstring)}")
     ast.print()
