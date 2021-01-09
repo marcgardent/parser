@@ -2,3 +2,5 @@ __pycache__
 *.dot
 *.svg
 .vscode
+.benchmarks
+.pytest_cache
